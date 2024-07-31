@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .priority-high {
+            color: red;
+            font-weight: bold;
+        }
+
+        .priority-medium {
+            color: orange;
+            font-weight: bold;
+        }
+
+        .priority-low {
+            color: green;
+            font-weight: bold;
+        }
+
+        .task-time {
+            font-size: 0.9em;
+            color: #888;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .task-item label {
+            margin-left: 0.5rem;
+            flex-grow: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-5">
+        <h1>Tasks</h1>
+        <button class="btn btn-primary mb-3" data-toggle="modal" data-target="#newTaskModal">
+            <i class="fas fa-plus"></i> Add Task
+        </button>
+        <div>
+            <h2>Open Tasks</h2>
+            <div id="openTasks" class="mb-5">
+                <!-- Open tasks will appear here -->
+            </div>
+        </div>
+        <div>
+            <h2>Doing Tasks</h2>
+            <div id="doingTasks" class="mb-5">
+                <!-- Doing tasks will appear here -->
+            </div>
+        </div>
+        <div>
+            <h2>Completed Tasks</h2>
+            <div id="completedTasks">
+                <!-- Completed tasks will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- New Task Modal -->
+    <div class="modal fade" id="newTaskModal" tabindex="-1" role="dialog" aria-labelledby="newTaskModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="newTaskModalLabel">New Task</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="newTaskForm">
+                        <div class="form-group">
+                            <label for="taskTitle">Title</label>
+                            <input type="text" class="form-control" id="taskTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="taskSubtitle">Sub-Title</label>
+                            <input type="text" class="form-control" id="taskSubtitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="taskPriority">Priority</label>
+                            <select class="form-control" id="taskPriority" required>
+                                <option value="1" class="priority-high">High</option>
+                                <option value="2" class="priority-medium">Medium</option>
+                                <option value="3" class="priority-low">Low</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Task</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var todoListAddress = 'http://127.0.0.1:8080';
+        const openStatus = 'OPEN';
+        const doingStatus = 'DOING';
+        const completedStatus = 'DONE';
+
+        var priorityMapping = {
+            'High': 1,
+            'Medium': 2,
+            'Low': 3
+        };
+
+        class Task {
+            constructor(taskId, title, subtitle, priority, dueDate, status, completedAt) {
+                this.taskId = taskId;
+                this.title = title;
+                this.subtitle = subtitle;
+                this.priority = priority;
+                this.dueDate = dueDate;
+                this.status = status;
+                this.completedAt = completedAt;
+            }
+        }
+
+        function getListTasksFromServer() {
+            taskList = [];
+
+            fetch(todoListAddress + '/api/v1/task', {
+                method: "GET",
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Credentials": true,
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    serverTasks = [];
+                    if (data.data != null && data.data.tasks != null) {
+                        serverTasks = data.data.tasks
+                    }
+                    for (let i = 0; i < serverTasks.length; i++) {
+                        taskList.push(new Task(
+                            serverTasks[i].taskId,
+                            serverTasks[i].title,
+                            serverTasks[i].subtitle,
+                            serverTasks[i].priority,
+                            serverTasks[i].dueDate,
+                            serverTasks[i].status,
+                            serverTasks[i].completedAt
+                        ));
+                    }
+                    displayTasks(taskList);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        }
+
+        function displayTasks(taskList) {
+            const openTasks = document.getElementById('openTasks');
+            const doingTasks = document.getElementById('doingTasks');
+            const completedTasks = document.getElementById('completedTasks');
+            for (let i = 0; i < taskList.length; i++) {
+                const task = taskList[i];
+                if (task.status === openStatus) {
+                    createTaskElement(openTasks, task);
+                } else if (task.status === doingStatus) {
+                    createTaskElement(doingTasks, task);
+                } else if (task.status === completedStatus) {
+                    createTaskElement(completedTasks, task);
+                }
+
+            }
+
+            sortTasks('openTasks');
+            sortTasks('doingTasks');
+            sortTasks('completedTasks');
+        }
+
+        function createTaskElement(parent, task) {
+            const priorityClass = task.priority === 1 ? 'priority-high' : task.priority === 2 ? 'priority-medium' : 'priority-low';
+            const taskItem = document.createElement('div');
+            taskItem.classList.add('task-item');
+            const taskId = `task${task.taskId}`;
+            taskItem.setAttribute('id', `${taskId}-item`);
+            taskItem.setAttribute('data-priority', task.priority);
+
+            var onchangeFunc = `"showDueDateModal('${taskId}')"`;
+            if (task.status === doingStatus) {
+                onchangeFunc = `"moveTask('#${taskId}', '${taskId}-item', 'openTasks', 'doingTasks', ${task.taskId})"`;
+            }
+
+
+            const taskDateTime = new Date(task.dueDate * 1000);
+            console.log("taskDateTime: ", taskDateTime.toLocaleString());
+
+            taskItem.innerHTML = `
+                <input type="checkbox" id="${taskId}" onchange=${onchangeFunc}>
+                <label for="${taskId}">
+                    <div>
+                        <span class="font-weight-bold">${task.title}</span><br>
+                        <span>${task.subtitle}</span>
+                    </div>
+                    <div class="${priorityClass}">${task.priority === 1 ? 'HIGH' : task.priority === 2 ? 'MEDIUM' : 'LOW'} PRIORITY</div>
+                    <div class="task-time">${taskDateTime.toLocaleString()}</div>
+                </label>
+            `;
+
+            console.log("inner task item: ", taskItem.innerHTML)
+            createDueDateModal(taskId, task.taskId);
+            parent.appendChild(taskItem);
+
+            const addedTaskItem = document.getElementById(`${taskId}-item`);
+            console.log("taskItem: ", taskItem)
+
+            const taskTimeElement = addedTaskItem.querySelector('.task-time');
+            taskTimeElement.textContent = taskDateTime.toLocaleString();
+            taskTimeElement.value = taskDateTime;
+
+            return taskItem;
+        }
+
+        document.getElementById('newTaskForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            addNewTask();
+            $('#newTaskModal').modal('hide');
+        });
+
+        function addNewTask() {
+            const title = document.getElementById('taskTitle').value;
+            const subtitle = document.getElementById('taskSubtitle').value;
+            var priority = parseInt(document.getElementById('taskPriority').value);
+            console.log("priority: ", priority)
+
+            fetch(todoListAddress + '/api/v1/task', {
+                method: "POST",
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Credentials": true,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    title: title,
+                    subtitle: subtitle,
+                    priority: priority
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.data != null) {
+                        task = new Task(
+                            data.data.taskId,
+                            title,
+                            subtitle,
+                            priority,
+                            null,
+                            openStatus,
+                            null
+                        );
+                        createTaskElement(openTasks, task);
+                        sortTasks('openTasks');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        }
+
+        function createDueDateModal(taskId, taskIdInt) {
+            const modal = document.createElement('div');
+            modal.classList.add('modal', 'fade');
+            modal.setAttribute('id', `${taskId}-dueDateModal`);
+            modal.setAttribute('tabindex', '-1');
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-labelledby', `${taskId}-dueDateModalLabel`);
+            modal.setAttribute('aria-hidden', 'true');
+
+            modal.innerHTML = `
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="${taskId}-dueDateModalLabel">Set Due Date for Task ${taskId}</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="${taskId}-dueDateForm">
+                                <div class="form-group">
+                                    <label for="${taskId}-dueDate">Due Date</label>
+                                    <input type="datetime-local" class="form-control" id="${taskId}-dueDate" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Set Due Date</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            document.getElementById(`${taskId}-dueDateForm`).addEventListener('submit', function (e) {
+                e.preventDefault();
+                setDueDate(taskId, taskIdInt);
+                $(`#${taskId}-dueDateModal`).modal('hide');
+            });
+        }
+
+        function showDueDateModal(taskId) {
+            document.querySelector(`#${taskId}`).checked = false;
+            $(`#${taskId}-dueDateModal`).modal('show');
+        }
+
+        function setDueDate(taskId, taskIdInt) {
+            const dueDate = document.getElementById(`${taskId}-dueDate`).value;
+            const taskItem = document.getElementById(`${taskId}-item`);
+            console.log("dueDate: ", dueDate)
+            console.log("taskItem: ", taskItem)
+            // taskItem.setAttribute('data-duedate', dueDate);
+
+            const taskTimeElement = taskItem.querySelector('.task-time');
+            taskTimeElement.textContent = new Date(dueDate).toLocaleString();
+            taskTimeElement.value = dueDate;
+
+            // Move task to Doing Tasks
+            moveTask(`#${taskId}`, `${taskId}-item`, 'openTasks', 'doingTasks', taskIdInt);
+        }
+
+        function moveTask(checkboxId, taskId, fromContainerId, toContainerId, taskIdInt) {
+            const taskItem = document.getElementById(taskId);
+            const fromContainer = document.getElementById(fromContainerId);
+            const toContainer = document.getElementById(toContainerId);
+
+            console.log("taskItem: ", taskItem)
+            const taskTimeElement = taskItem.querySelector('.task-time').value;
+            console.log("taskTimeElement: ", taskTimeElement)
+            const unixTimestamp = Math.floor(Date.parse(taskTimeElement) / 1000);
+            console.log("unix timestamp: ", unixTimestamp)
+
+            if (fromContainer.contains(taskItem)) {
+                fetch(todoListAddress + '/api/v1/task', {
+                    method: "POST",
+                    headers: {
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Credentials": true,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        taskId: taskIdInt,
+                        status: (toContainerId === 'doingTasks') ? doingStatus : completedStatus,
+                        dueDate: unixTimestamp,
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        const checkbox = document.querySelector(checkboxId);
+                        const taskItem = document.getElementById(taskId);
+
+                        const fromContainer = document.getElementById(fromContainerId);
+                        const toContainer = document.getElementById(toContainerId);
+
+                        if (data.data != null && data.data.taskId != null) {
+                            toContainer.appendChild(taskItem);
+                            console.log("returnedTaskID: ", data.data.taskId);
+                            if (toContainerId === 'doingTasks') {
+                                checkbox.setAttribute('onchange', moveTask(taskId, taskId, 'doingTasks', 'completedTasks', data.data.taskId));
+                            } else if (toContainerId === 'completedTasks') {
+                                checkbox.checked = true;
+                                checkbox.disabled = true;
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+            }
+
+            // Sort tasks after moving
+            sortTasks('openTasks');
+            sortTasks('doingTasks');
+            sortTasks('completedTasks');
+        }
+
+        function sortTasks(containerId) {
+            const container = document.getElementById(containerId);
+            const tasks = Array.from(container.getElementsByClassName('task-item'));
+            tasks.sort((a, b) => {
+                const priorityA = parseInt(a.getAttribute('data-priority'));
+                const priorityB = parseInt(b.getAttribute('data-priority'));
+                console.log(priorityA, priorityB)
+                if (priorityA !== priorityB) {
+                    return priorityA - priorityB;
+                }
+                const dateA = new Date(a.getAttribute('data-duedate'));
+                const dateB = new Date(b.getAttribute('data-duedate'));
+                return dateA - dateB;
+            });
+            tasks.forEach(task => container.appendChild(task));
+        }
+
+        getListTasksFromServer();
+        document.addEventListener('DOMContentLoaded', () => {
+            sortTasks('openTasks');
+            sortTasks('doingTasks');
+            sortTasks('completedTasks');
+        });
+    </script>
+    <script src="https://kit.fontawesome.com/a076d05399.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+
+</html>
